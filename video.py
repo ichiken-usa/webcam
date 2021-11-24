@@ -8,9 +8,9 @@ from logging import getLogger
 import log
 
 # Log設定
-LOG_PATH = "./webcam/Log/" #Logファイル保存先
+LOG_PATH = "./Log/" #Logファイル保存先
 logger = getLogger(__name__)
-log.set_log_config(logger, LOG_PATH, 'webcam.log')
+log.set_log_config(logger, LOG_PATH, 'video.log')
 
 
 class WebCamTimeLapse:
@@ -118,7 +118,7 @@ class WebCamTimeLapse:
         dt_now = datetime.datetime.now()
 
         day_folder = dt_now.strftime("%Y%m%d")
-        video_dir = self.VIDEO_PATH + day_folder+'_'+self.remark
+        video_dir = self.video_path + day_folder+'_'+self.remark
         os.makedirs(video_dir, exist_ok=True)
         filename = video_dir +"/"+ dt_now.strftime("%Y%m%d_%H%M%S") + ".mp4"
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     mp4_fps = 60
     resize_ratio = 1
     video_path = './Video/'
-    remark = 'GC3_OCVIR'
+    remark = 'timelapse'
 
     # タイムラプスのインスタンス
     tl = WebCamTimeLapse(mp4_fps, resize_ratio, video_path, remark)       
