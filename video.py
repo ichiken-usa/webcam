@@ -8,17 +8,17 @@ from logging import getLogger
 import log
 
 # Log設定
-LOG_PATH = "./webcam/Log/" #Logファイル保存先
+LOG_PATH = "./Log/" #Logファイル保存先
 logger = getLogger(__name__)
-log.set_log_config(logger, LOG_PATH, 'webcam.log')
+log.set_log_config(logger, LOG_PATH, 'video.log')
 
 
-class WebCamTimeLapse:
+class WebCam:
 
-    def __init__(self, mp4_fps, resize_ratio, video_path, remark):
+    def __init__(self, video_path, remark):
         
         # ファイルパス
-        self.VIDEO_PATH = video_path #Videoデータ保存先
+        self.video_path = video_path #Videoデータ保存先
         self.remark = remark
 
         # 時間ごとに処理するための比較用変数
@@ -30,104 +30,52 @@ class WebCamTimeLapse:
         # Fourcc (MP4)
         self.fourcc = cv2.VideoWriter_fourcc("m","p","4","v") 
 
-        # Video保存設定
-        self.mp4_fps = mp4_fps #FPS for timelapse
-        self.resize_ratio = resize_ratio # 縮小比率
-        
-
-    def timelapse(self):
-
-        logger.info('Start timelapse')
-
-        try:
-
-            # MP4保存先
-            filename = self.__get_video_dir()
-
-            # Webカメラ用インスタンス     
-            cap = cv2.VideoCapture(0) # 引数でカメラ指定
-
-            # Webカメラ情報取得    
-            fps = int(cap.get(cv2.CAP_PROP_FPS)) # FPS    
-            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) # Width   
-            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) # Height
-            logger.info(f'FPS={fps} Width={w} Hight={h}')
-
-            # 設定にしたがってサイズ等分 1ならそのまま 2なら半分
-            mp4_w = int(w/self.resize_ratio)
-            mp4_h = int(h/self.resize_ratio)
-
-            # Video保存用インスタンス
-            video = cv2.VideoWriter(filename, self.fourcc, self.mp4_fps, (mp4_w,mp4_h))
-
-            # Webカメラ安定タイマー
-            time.sleep(2) #s
-
-            while True:
-                #１フレーム読み込み
-                ret, img = cap.read()
-
-                # Movie表示
-                dt_now = datetime.datetime.now()
-                dt_str = dt_now.strftime('%Y/%m/%d %H:%M:%S')
-                cv2.putText(img, dt_str,(0,30), cv2.FONT_HERSHEY_PLAIN, 2, (255,255,255), 2, cv2.LINE_AA)
-                try:
-                    cv2.imshow("image", img)
-                except Exception as e:
-                    logger.exception(e)
-
-                # 1秒ごとにムービー保存
-                if self.__compare_sec():
-                    
-                    # 1時間ごとに保存ファイル切り替え
-                    if self.__compare_hour():
-                        
-                        # 日付変わったとき用にファイルパス更新
-                        filename = self.__get_video_dir()
-
-                        # Video保存用インスタンス更新
-                        video.release()
-                        video = cv2.VideoWriter(filename, self.fourcc, self.mp4_fps, (mp4_w,mp4_h))
-                    
-                    try:
-                        video.write(cv2.resize(img,(mp4_w,mp4_h)))
-                    except Exception as e:
-                        logger.exception(e)
-
-                # キー入力受付 & ループディレイ
-                k = cv2.waitKey(50) #ms
-                if k == 27: # ESCで終了
-                    break
-
-        except KeyboardInterrupt: # ターミナルCtrl+C強制終了
-            logger.info(f"KeyboardInterrupt")
-
-        except Exception as e:
-            logger.exception(e)
-
-        finally:
-            #終了処理
-            video.release()
-            cap.release()
-            cv2.destroyAllWindows()
-            logger.info('Finished')
 
 
-    def __get_video_dir(self):
+    def start_webcam(self, camera_num):
+        # Webカメラ用インスタンス     
+        self.cap = cv2.VideoCapture(camera_num) # 引数でカメラ指定
+        self.fps = int(self.cap.get(cv2.CAP_PROP_FPS)) # FPS    
+        self.w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)) # Width   
+        self.h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) # Height
+        logger.info(f'FPS={self.fps} Width={self.w} Hight={self.h}')   
+
+    def change_video_size(self, resize_ratio):
+        # 設定にしたがってサイズ等分 1ならそのまま 2なら半分
+        self.w = int(self.w/resize_ratio)
+        self.h = int(self.h/resize_ratio)
+
+    def update_video_path(self):
 
         dt_now = datetime.datetime.now()
-
         day_folder = dt_now.strftime("%Y%m%d")
-        video_dir = self.VIDEO_PATH + day_folder+'_'+self.remark
-        os.makedirs(video_dir, exist_ok=True)
-        filename = video_dir +"/"+ dt_now.strftime("%Y%m%d_%H%M%S") + ".mp4"
+        dir = self.video_path + day_folder+'_'+ self.remark
+        os.makedirs(dir, exist_ok=True)
+        self.video_full_path = dir +"/"+ dt_now.strftime("%Y%m%d_%H%M%S") + ".mp4"
 
-        logger.info(filename)
+        logger.info(self.video_full_path)
 
-        return filename
+    def set_video_writer(self, fps):
+        self.video_writer = cv2.VideoWriter(self.video_full_path, self.fourcc, fps, (self.w,self.h))
 
+    def refresh_video_writer(self):
+        self.video_writer.release()
+        self.set_video_writer()
 
-    def __compare_sec(self):
+    def save_video(self, img):
+        self.video_writer.write(cv2.resize(img,(self.w,self.h)))
+
+    def read_image(self):
+        ret, img = self.cap.read()
+        return img
+
+    def add_current_time(self, img):
+        dt_now = datetime.datetime.now()
+        dt_str = dt_now.strftime('%Y/%m/%d %H:%M:%S')
+        cv2.putText(img, dt_str,(0,30), cv2.FONT_HERSHEY_PLAIN, 2, (255,255,255), 2, cv2.LINE_AA)
+        return img
+
+    def compare_sec(self):
 
         dt_now = datetime.datetime.now()
         now = dt_now.second
@@ -138,8 +86,7 @@ class WebCamTimeLapse:
             self.previous_sec = now
             return True
 
-
-    def __compare_min(self):
+    def compare_min(self):
 
         dt_now = datetime.datetime.now()
         now = dt_now.minute
@@ -150,8 +97,7 @@ class WebCamTimeLapse:
             self.previous_min = now
             return True
 
-
-    def __compare_hour(self):
+    def compare_hour(self):
 
         dt_now = datetime.datetime.now()
         now = dt_now.hour
@@ -163,14 +109,75 @@ class WebCamTimeLapse:
             return True
 
 
+
 if __name__ == "__main__":
 
     logger.info('App start')
-    mp4_fps = 60
     resize_ratio = 1
     video_path = './Video/'
-    remark = 'GC3_OCVIR'
+    remark = 'video'
 
-    # タイムラプスのインスタンス
-    tl = WebCamTimeLapse(mp4_fps, resize_ratio, video_path, remark)       
-    tl.timelapse()
+    # webcamインスタンス
+    wc = WebCam(video_path, remark)       
+
+    wc.start_webcam(0)
+
+    fps = wc.fps
+
+    try:
+
+        # 設定にしたがってサイズ等分 1ならそのまま 2なら半分
+        wc.change_video_size(resize_ratio)
+
+        # MP4保存先を更新
+        wc.update_video_path()
+
+        # Video保存用インスタンス
+        wc.set_video_writer(fps)
+
+        # Webカメラ安定タイマー
+        time.sleep(2) #s
+
+        while True:
+            #１フレーム読み込み
+            img = wc.read_image()
+
+            # 画面に時間表示追加
+            img = wc.add_current_time(img)
+
+            try:
+                cv2.imshow("image", img)
+            except Exception as e:
+                logger.exception(e)
+            
+            # 1時間ごとに保存ファイル切り替え
+            if wc.compare_hour():
+                
+                # ファイルパス更新
+                wc.update_video_path()
+
+                # Video保存用インスタンス更新
+                wc.refresh_video_writer(fps)
+            
+            try:
+                wc.save_video(img)
+            except Exception as e:
+                logger.exception(e)
+
+            # キー入力受付 & ループディレイ
+            k = cv2.waitKey(1) #ms
+            if k == 27: # ESCで終了
+                break
+
+    except KeyboardInterrupt: # ターミナルCtrl+C強制終了
+        logger.info(f"KeyboardInterrupt")
+
+    except Exception as e:
+        logger.exception(e)
+
+    finally:
+        #終了処理
+        
+        del wc
+        cv2.destroyAllWindows()
+        logger.info('Finished')
